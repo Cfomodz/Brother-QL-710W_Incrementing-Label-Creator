@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Label Printer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        input, button { font-size: 16px; padding: 10px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Print Label</h1>
+    <input type="text" id="labelType" placeholder="Label Type (e.g., Coin)">
+    <button onclick="printLabel()">Print</button>
+
+    <script>
+        async function printLabel() {
+            const labelType = document.getElementById('labelType').value || 'Coin';
+            console.log('Label Type:', labelType);  // Log the label type
+            try {
+                const response = await fetch('http://localhost:5000/print', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label_type: labelType })
+                });
+                const result = await response.json();
+                console.log('Response:', result);  // Log response to console
+                alert(`Printed: ${result.label_type} #${result.number}`);
+            } catch (error) {
+                console.error('Error:', error);  // Log error to console
+                alert("Error: Check server connection.");
+            }
+        }
+    </script>
+</body>
+</html>
