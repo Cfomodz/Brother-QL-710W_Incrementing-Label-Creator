@@ -1,6 +1,11 @@
 <div align="center">
-
+  
 # Whatnot Item Label Creator  
+![GitHub License](https://img.shields.io/github/license/Cfomodz/Whatnot-Item-Label-Creator)
+![GitHub Sponsors](https://img.shields.io/github/sponsors/Cfomodz)
+![Discord](https://img.shields.io/discord/425182625032962049)
+
+
 <img src="https://github.com/user-attachments/assets/e75d6423-de8a-475d-b8a9-3d0b1327fe8c" alt="label-writer" width="400"/>
 
 ### Creates incrementing labels for the Brother QL-710W  
