@@ -21,6 +21,9 @@ PRINTER_IP = '10.0.0.13'  # Replace with your printer's IP
 PRINTER_MODEL = 'QL-700'  # QL-710W uses the QL-700 driver
 LABEL_SIZE = '62'  # For 2.4 inch continuous roll (62mm width)
 
+# Add a variable to track the most recent label type
+MOST_RECENT_LABEL_TYPE = None
+
 def load_counters():
     if os.path.exists(COUNTER_FILE):
         with open(COUNTER_FILE, 'r') as f:
@@ -45,79 +48,66 @@ def print_label(label_type, number):
     barcode = Code128(barcode_data, writer=ImageWriter())
     barcode_image_path = "barcode.png"
     barcode.save(barcode_image_path.split('.')[0])
-    
     # Load the barcode image
     barcode_image = Image.open(barcode_image_path)
+
+    # # Calculate barcode dimensions with proper aspect ratio
+    # barcode_max_width = 696 - 20  # Fixed width for QL-700
+    # barcode_aspect_ratio = barcode_image.height / barcode_image.width
+    # barcode_width = barcode_max_width
+    # barcode_height = int(barcode_width * barcode_aspect_ratio)
+    
+    # # Resize the barcode image first to maintain aspect ratio
+    # barcode_image = barcode_image.resize(
+    #     (barcode_width, barcode_height),
+    #     getattr(Image, 'Resampling', Image).LANCZOS
+    # )
 
     qlr = BrotherQLRaster(PRINTER_MODEL)
     
     try:
-        font = ImageFont.truetype("arial.ttf", 14)
-        bold_font = ImageFont.truetype("arialbd.ttf", 16)  # Bold and slightly larger
+        font = ImageFont.truetype("arial.ttf", 60)
+        bold_font = ImageFont.truetype("arialbd.ttf", 60)
     except IOError:
         font = ImageFont.load_default()
         bold_font = ImageFont.load_default()
-    # Split the product name to emphasize the last part
+
     main_text = label_type
-    emphasized_text = f"#{number}"
+    emphasized_text = f" # {number}"
     image_width = 696  # Fixed width for QL-700
     
-    # Calculate barcode dimensions first
-    barcode_max_width = 696 - 20  # Fixed width for QL-700
-    barcode_aspect_ratio = barcode_image.height / barcode_image.width
-    barcode_width = barcode_max_width
-    barcode_height = int(barcode_width * barcode_aspect_ratio)
-    
-    # Now we can calculate image height
-    image_height = max(173, barcode_height + 50)  # Ensure minimum height and space for barcode
+    # Calculate image height based on barcode and text
+    # image_height = max(173, barcode_height + 50)  # Ensure minimum height and space for barcode
+    image_height = 280 + 173
     background_color = 1
 
     image = Image.new('1', (image_width, image_height), background_color)
     draw = ImageDraw.Draw(image)
     
-    # Set text positions
-    text_x = 10
-    text_y = 10
+    # Set initial text positions
+    text_x = (image_width - font.getlength(main_text + emphasized_text)) // 2
+    text_y = 20
 
     # Draw the main part of the product name
     draw.text((text_x, text_y), main_text, font=font, fill="black")
 
     # Calculate the width of the main text to position the emphasized text
-    main_text_bbox = font.getbbox(main_text)
-    main_text_width = main_text_bbox[2] - main_text_bbox[0]
+    main_text_width = font.getlength(main_text)
 
     # Draw the emphasized part of the product name
     draw.text((text_x + main_text_width, text_y), emphasized_text, font=bold_font, fill="black")
 
-    # Update text size calculation
-    main_text_bbox = font.getbbox(main_text)
-    main_text_height = main_text_bbox[3] - main_text_bbox[1]
-    
-    # Draw the date below the product name
-    date_y = text_y + main_text_height + 5
-    draw.text((text_x, date_y), today, font=font, fill="black")
+    # Calculate date position
+    date_text = today
+    date_x = (image_width - font.getlength(date_text)) // 2
+    date_y = text_y + max(font.getbbox(main_text)[3], bold_font.getbbox(emphasized_text)[3]) + 20
 
-    # Resize the barcode image to fit within the label width
-    barcode_image = barcode_image.resize(
-        (barcode_width, barcode_height),
-        getattr(Image, 'Resampling', Image).LANCZOS
-    )
-
-    # Update barcode position calculation
-    date_bbox = font.getbbox(today)
-    date_height = date_bbox[3] - date_bbox[1]
-    barcode_y = date_y + date_height + 5
+    # Draw the date
+    draw.text((date_x, date_y), date_text, font=font, fill="black")
 
     # Calculate barcode position
-    barcode_x = (image_width - barcode_width) // 2
-
-    # Ensure the barcode fits within the image height
-    if barcode_y + barcode_height > image_height:
-        # If not, recalculate the barcode dimensions
-        barcode_height = image_height - barcode_y - 5
-        barcode_width = int(barcode_height / barcode_aspect_ratio)
-        barcode_image = barcode_image.resize((barcode_width, barcode_height), getattr(Image, 'Resampling', Image).LANCZOS)
-        barcode_x = (image_width - barcode_width) // 2
+    barcode_x = (image_width - barcode_image.width) // 2
+    barcode_y = date_y + font.getbbox(date_text)[3] + 20
 
     # Paste the barcode image onto the label
     image.paste(barcode_image, (barcode_x, barcode_y))
@@ -144,9 +134,13 @@ def print_label(label_type, number):
 
 @app.route('/print', methods=['POST'])
 def handle_print():
+    global MOST_RECENT_LABEL_TYPE
     print("Received request:", request.json)  # Log the request
     data = request.json
-    label_type = data.get('label_type', 'Coin').strip()
+    label_type = data.get('label_type', MOST_RECENT_LABEL_TYPE or 'Coin').strip()
+    
+    # Update the most recent label type
+    MOST_RECENT_LABEL_TYPE = label_type
     
     if label_type not in counters:
         counters[label_type] = 0
@@ -158,6 +152,28 @@ def handle_print():
         "status": "success",
         "label_type": label_type,
         "number": counters[label_type]
+    })
+
+@app.route('/clear_counters', methods=['POST'])
+def clear_counters():
+    data = request.json
+    label_type = data.get('label_type', 'all').strip().lower()
+    
+    if label_type == 'all':
+        counters.clear()
+    elif label_type in counters:
+        del counters[label_type]
+    else:
+        return jsonify({
+            "status": "error",
+            "message": f"Label type '{label_type}' not found"
+        }), 404
+    
+    save_counters(counters)
+    return jsonify({
+        "status": "success",
+        "cleared": label_type,
+        "counters": counters
     })
 
 @app.route('/')

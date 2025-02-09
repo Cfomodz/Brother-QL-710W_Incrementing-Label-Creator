@@ -1,0 +1,4 @@
+.venv
+*.pdf
+*.json
+paper_master.py
