@@ -2,3 +2,5 @@
 *.pdf
 *.json
 *.png
+.env
+/templates/__pycache__
